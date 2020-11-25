@@ -13,7 +13,7 @@ class FileSystem:
         secondStr = f.readline()
 
     def getDataFromFile(self, prefix, file):
-        f = open(self.path + prefix + '_test.txt', 'r')
+        f = open(self.path + prefix + file, 'r')
         self.skip(f)
         data = []
         for s in f.readlines():
