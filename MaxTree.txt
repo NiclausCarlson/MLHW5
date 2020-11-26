@@ -1,7 +1,7 @@
 ----------------------------------------------------------
-	Datasets index: 12
-	Depth: 10
-	Accuracy: 87.73505472916082
+	Datasets index: 2
+	Depth: 9
+	Accuracy: 70.1526717557252
 	Criterion: entropy
 	Splitter: best
 ----------------------------------------------------------

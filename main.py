@@ -1,7 +1,7 @@
 import copy
 import math
 import random
-
+import operator
 from sklearn.tree import DecisionTreeClassifier
 import Utils
 import matplotlib.pyplot as plt
@@ -17,42 +17,10 @@ def getAccuracy(classifier, data):
     return 100 * quantity / len(data.classes)
 
 
-def getKey(countMap):
-    m = 0
-    key = 0
-    for k, v in countMap.items():
-        if v > m:
-            m = v
-            key = k
-    return key
-
-
-def getMajorityLabel(predictions):
-    predicted = []
-    for _ in predictions:
-        countMap = {}
-        for j in range(len(predictions[0])):
-            if countMap.get(j) is None:
-                countMap[j] = 1
-            else:
-                countMap[j] += 1
-        predicted.append(getKey(countMap))
-
-    return predicted
-
-
-def getWoodsAccuracy(predictions, data):
-    predicted = getMajorityLabel(predictions)
-    count = 0
-    for i in range(len(predicted)):
-        if predicted[i] == data.label[i]:
-            count += 1
-    return 100 * count / len(predicted)
-
-
-def getRandomDatasets(size, dataset):
+def generateRandomDatasets(dataset):
     usedIndexes = {}
     datasets = []
+    size = round(math.sqrt(len(dataset.label)))
     for i in range(round(len(dataset.label) / size)):
         indexes = []
         for q in range(size):
@@ -64,7 +32,6 @@ def getRandomDatasets(size, dataset):
             tmpDataset.classes.append(dataset.classes[q])
             tmpDataset.label.append(dataset.label[q])
         datasets.append(copy.deepcopy(tmpDataset))
-
     return datasets
 
 
@@ -91,31 +58,12 @@ def printGraph(tree, trainSet, testSet, datasetName, maxDepth):
     fig.savefig(datasetName)
 
 
-def printWoodsAccuracy(ind, accuracy, f):
-    f.write('---------------------\n')
-    f.write('Ind: ' + str(ind + 1) + '\n')
-    f.write('Accuracy: ' + str(accuracy) + '\n')
-    f.write('---------------------\n')
-
-
-def printInFile(tree, f):
-    f.write('----------------------------------------------------------\n')
-    f.write('\tDatasets index: ' + str(tree.idx + 1) + '\n')
-    f.write('\tDepth: ' + str(tree.classifier.get_depth()) + '\n')
-    f.write('\tAccuracy: ' + str(tree.accuracy) + '\n')
-    f.write('\tCriterion: ' + tree.criterion + '\n')
-    f.write('\tSplitter: ' + tree.splitter + '\n')
-    f.write('----------------------------------------------------------\n')
-
-
-def printBestClassifiers(minClassifier, maxClassifier):
-    f = open('MinTree.txt', 'w')
-    printInFile(minClassifier, f)
-    f.close()
-
-    f = open('MaxTree.txt', 'w')
-    printInFile(maxClassifier, f)
-    f.close()
+def getStrToDatasetAccuracy(tree):
+    blockDelimiter = '----------------------------------------------------------\n'
+    return blockDelimiter + '\tDatasets index: ' + str(
+        tree.idx + 1) + '\n' + '\tDepth: ' + str(tree.classifier.get_depth()) + '\n' + '\tAccuracy: ' + str(
+        tree.accuracy) + '\n' + '\tCriterion: ' + tree.criterion + '\n' + \
+           '\tSplitter: ' + tree.splitter + '\n' + blockDelimiter
 
 
 class Solver:
@@ -126,16 +74,47 @@ class Solver:
         self.criterions = ['gini', 'entropy']
         self.splitters = ['best', 'random']
         self.MAX_DEPTH = 10
-        self.trees = [self.Solve(None, 0, None, None, -1) for _ in range(21)]
+        self.trees = [self.Tree(None, 0, None, None, -1) for _ in range(21)]
         self.data = []
+        self.woods = []
 
-    class Solve:
+    class Tree:
         def __init__(self, classifier, accuracy, criterion, splitter, idx):
             self.classifier = classifier
             self.accuracy = accuracy
             self.idx = idx
             self.criterion = criterion
             self.splitter = splitter
+
+    class Wood:
+        def __init__(self, trees, idx):
+            self.trees = trees
+            self.idx = idx
+
+        def getAccuracy(self, dataset):
+            def voting(vote):
+                results = []
+                for j in range(len(vote[0])):
+                    answers = {}
+                    for i in range(len(vote)):
+                        if answers.get(vote[i][j]) is None:
+                            answers[vote[i][j]] = 1
+                        else:
+                            answers[vote[i][j]] += 1
+                    results.append(max(answers.items(), key=operator.itemgetter(1))[0])
+
+                return results
+
+            def getVote():
+                vote = []
+                for tree in self.trees:
+                    vote.append(tree.predict(dataset.classes))
+                return vote
+
+            votingResult = voting(getVote())
+            accuracy = 100 * sum([1 if x[0] == x[1] else 0 for x in zip(votingResult, dataset.label)]) / len(
+                votingResult)
+            return accuracy
 
     def setBestTrees(self):
         idx = 0
@@ -166,64 +145,64 @@ class Solver:
                 minTree = copy.deepcopy(tree)
         return minTree, maxTree
 
+    def printBestClassifiers(self, minClassifier, maxClassifier):
+        self.fileSystem.writeInFile('MinTree.txt', getStrToDatasetAccuracy(minClassifier))
+        self.fileSystem.writeInFile('MaxTree.txt', getStrToDatasetAccuracy(maxClassifier))
+
     def printAccuracy(self):
         f = open("treesParameters.txt", 'w')
         for tree in self.trees:
-            printInFile(tree, f)
+            f.write(getStrToDatasetAccuracy(tree))
         f.close()
 
-    def getWood(self, datasets):
-        trees = []
-        for dataset in datasets:
-            criterionInd = random.randint(0, 1)
-            splitterInd = random.randint(0, 1)
-            tmpClassifier = DecisionTreeClassifier(criterion=self.criterions[criterionInd],
-                                                   splitter=self.splitters[splitterInd])
-            tmpClassifier.fit(dataset.classes, dataset.label)
-            trees.append(tmpClassifier)
-        return trees
+    def setWoods(self):
 
-    def printWood(self):
-        woods = []
-        lengths = []
-        for dataset in self.data:
-            size = round(math.sqrt(len(dataset[0].label)))
-            lengths.append(size)
-            datasets = getRandomDatasets(size, dataset[0])
-            woods.append(self.getWood(datasets))
-        ind = 0
-        f = open('WoodAndTrain.txt', 'w')
-        for wood in woods:
-            predictions = []
-            accuracy = []
-            for tree in wood:
-                predictions.append(tree.predict(self.data[ind][0].classes))
-                accuracy.append(getWoodsAccuracy(predictions, self.data[ind][0]))
-            printWoodsAccuracy(ind, accuracy, f)
-            ind += 1
-        f.close()
+        def getWood(idx, dataset):
+            trees = []
+            datasets = generateRandomDatasets(dataset[0])  # беру набор случайных элементов тренировочной выборки
+            for dt in datasets:  # и обучаю на них лес
+                criterionInd = random.randint(0, 1)
+                splitterInd = random.randint(0, 1)
+                tmpClassifier = DecisionTreeClassifier(criterion=self.criterions[criterionInd],
+                                                       splitter=self.splitters[splitterInd])
+                tmpClassifier.fit(dt.classes, dt.label)
+                trees.append(tmpClassifier)
+            return self.Wood(trees, idx)
 
-        ind = 0
-        f = open('WoodAndTest.txt', 'w')
-        for wood in woods:
-            predictions = []
-            accuracy = []
-            for tree in wood:
-                datasets = getRandomDatasets(lengths[ind], self.data[ind][1].classes)
-                for dataset in datasets:
-                    predictions.append(tree.predict(dataset))
-            printWoodsAccuracy(ind, accuracy, f)
-            ind += 1
-        f.close()
+        k = 0
+        for i in self.data:
+            self.woods.append(getWood(k, i))
+            k += 1
+
+    def printWoodAccuracyes(self, fileName, accuracyes):
+        blocDelimiter = "-----------------------------------\n"
+        datasetIndex = "\t Datasets index: "
+        accuracy = "\t Accuracy: "
+        message = ""
+        for idx in range(0, len(self.woods)):
+            message += str(blocDelimiter + datasetIndex + str(idx + 1) + '\n'
+                           + accuracy + str(accuracyes[idx]) + '\n' + blocDelimiter)
+            self.fileSystem.writeInFile(fileName, message)
+
+    def printWoodsAccuracyes(self):
+        trainAccuracys = []
+        for wood in self.woods:
+            trainAccuracys.append(wood.getAccuracy(self.data[wood.idx][0]))
+        self.printWoodAccuracyes("WoodAndTrain.txt", trainAccuracys)
+        testAccuracyes = []
+        for wood in self.woods:
+            testAccuracyes.append(wood.getAccuracy(self.data[wood.idx][1]))
+        self.printWoodAccuracyes("WoodAndTest.txt", testAccuracyes)
 
     def getSolve(self):
         self.setBestTrees()
         self.printAccuracy()
         minTree, maxTree = self.findMaxAndMinDepthTrees()
-        printBestClassifiers(minTree, maxTree)
+        self.printBestClassifiers(minTree, maxTree)
         printGraph(minTree, self.data[minTree.idx][0], self.data[minTree.idx][1], "Min Tree", self.MAX_DEPTH)
         printGraph(maxTree, self.data[maxTree.idx][0], self.data[maxTree.idx][1], "Max Tree", self.MAX_DEPTH)
-        self.printWood()
+        self.setWoods()
+        self.printWoodsAccuracyes()
 
 
 solver = Solver()

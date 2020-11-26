@@ -24,6 +24,10 @@ class FileSystem:
     def getData(self, prefix):
         return self.getDataFromFile(prefix, '_train.txt'), self.getDataFromFile(prefix, '_test.txt')
 
+    def writeInFile(self, fileName, message):
+        f = open(fileName, 'w')
+        f.write(message)
+        f.close()
 
 def getPrefixList():
     prefixes = []
