@@ -161,10 +161,8 @@ class Solver:
             trees = []
             datasets = generateRandomDatasets(dataset[0])  # беру набор случайных элементов тренировочной выборки
             for dt in datasets:  # и обучаю на них лес
-                criterionInd = random.randint(0, 1)
-                splitterInd = random.randint(0, 1)
-                tmpClassifier = DecisionTreeClassifier(criterion=self.criterions[criterionInd],
-                                                       splitter=self.splitters[splitterInd])
+                tmpClassifier = DecisionTreeClassifier(criterion="gini",
+                                                       splitter="best")
                 tmpClassifier.fit(dt.classes, dt.label)
                 trees.append(tmpClassifier)
             return self.Wood(trees, idx)
